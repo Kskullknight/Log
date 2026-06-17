@@ -1,0 +1,7 @@
+#!/bin/sh
+# 옵시디언 노트를 docs/로 동기화하고 결과를 자동 스테이징한다.
+# git commit 할 때마다 자동 실행된다.
+ROOT="$(git rev-parse --show-toplevel)"
+python3 "$ROOT/tools/sync_obsidian.py" --stage
+# 이미지 누락 등으로 0이 아닌 값을 반환해도 커밋은 막지 않는다(경고만 출력).
+exit 0

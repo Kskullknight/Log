@@ -7,11 +7,11 @@ site_author: junsookim
 
 # 배포 주소 (프로젝트 페이지 기준). 사용자명/저장소명에 맞게 수정하세요.
 # 예) https://junsookim.github.io/study/
-site_url: https://USERNAME.github.io/REPO/
+site_url: https://kskullknight.github.io/Log/
 
-# GitHub 저장소 링크 (우측 상단 아이콘). 사용자명/저장소명에 맞게 수정하세요.
-repo_url: https://github.com/USERNAME/REPO
-repo_name: USERNAME/REPO
+# GitHub 저장소 링크 (우측 상단 아이콘).
+repo_url: https://github.com/Kskullknight/Log
+repo_name: Kskullknight/Log
 
 # =========================================================
 # 테마 (Material for MkDocs)

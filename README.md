@@ -1,0 +1,1 @@
+https://kskullknight.github.io/Log/

@@ -53,6 +53,8 @@ theme:
 # 플러그인
 # =========================================================
 plugins:
+  - awesome-nav                  # 폴더 기반 nav 자동 생성(.nav.yml). SWE 새 노트 자동 반영
+  - callouts                     # 옵시디언 콜아웃(> [!note])을 MkDocs admonition으로 변환
   - search:
       lang: ko
   - blog:
@@ -69,7 +71,11 @@ plugins:
 markdown_extensions:
   - admonition                   # !!! note 같은 강조 박스
   - pymdownx.details
-  - pymdownx.superfences         # 코드 펜스 강화
+  - pymdownx.superfences:        # 코드 펜스 강화 + mermaid 다이어그램 지원
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -88,18 +94,5 @@ markdown_extensions:
 # =========================================================
 # 내비게이션 (상단 탭 구성)
 # =========================================================
-nav:
-  - 홈: index.md
-  - 블로그:
-      - blog/index.md
-  - 노트:
-      - notes/index.md
-      - 마크다운 사용법: notes/markdown-guide.md
-  - 독서:
-      - 독서/index.md
-      - 소프트웨어 공학 이론과 실제:
-          - 독서/소프트웨어공학-이론과-실제/index.md
-  - 소프트웨어공학:
-      - "6월 1주차": "SWE/6월 1주차.md"
-      - "6월 3주차": "SWE/6월 3주차.md"
-      - "생산 공학과 설계 공학": "SWE/생산 공학과 설계 공학.md"
+# nav 구조는 awesome-nav 플러그인이 docs/.nav.yml 및 각 폴더의 .nav.yml로 관리한다.
+# (SWE 폴더는 자동 확장되어 새 노트가 자동으로 메뉴에 추가됨)

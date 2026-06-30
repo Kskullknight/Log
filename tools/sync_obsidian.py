@@ -60,6 +60,23 @@ def find_attachment(name: str) -> Path | None:
     return None
 
 
+def with_title(text: str, title: str) -> str:
+    """문서 맨 앞에 파일명 기반 title frontmatter를 보장한다.
+
+    MkDocs/awesome-nav는 nav 제목을 본문 첫 H1에서 가져오므로, 파일명이 그대로
+    메뉴에 보이도록 title을 주입한다. 이미 title이 있으면 손대지 않는다(멱등).
+    """
+    esc = title.replace("\\", "\\\\").replace('"', '\\"')
+    if text.startswith("---\n") or text.startswith("---\r\n"):
+        nl = text.find("\n")
+        head_end = text.find("\n---", nl)
+        block = text[:head_end] if head_end != -1 else text
+        if re.search(r"(?m)^title\s*:", block):
+            return text                       # 이미 title 있음 → 유지
+        return text[:nl + 1] + f'title: "{esc}"\n' + text[nl + 1:]
+    return f'---\ntitle: "{esc}"\n---\n\n' + text
+
+
 def convert(text: str, note_dest: Path, assets_dir: Path) -> tuple[str, list[str]]:
     """노트 본문의 임베드를 변환하고, 복사해야 할 이미지를 모은다."""
     missing: list[str] = []
@@ -98,6 +115,7 @@ def convert(text: str, note_dest: Path, assets_dir: Path) -> tuple[str, list[str
 def main() -> int:
     stage = "--stage" in sys.argv[1:]
     total_notes = 0
+    changed_notes = 0
     total_imgs = 0
     all_missing: list[str] = []
     touched: list[Path] = []
@@ -118,15 +136,24 @@ def main() -> int:
 
             text = md.read_text(encoding="utf-8")
             new_text, missing = convert(text, note_dest, assets_dir)
-            note_dest.write_text(new_text, encoding="utf-8")
+            new_text = with_title(new_text, note_dest.stem)   # 파일명을 nav 제목으로
+
+            # 변환 결과가 기존 파일과 동일하면 다시 쓰지 않는다(변경 없음 → 빠른 배포).
+            old_text = note_dest.read_text(encoding="utf-8") if note_dest.exists() else None
+            if old_text == new_text:
+                print(f"= {rel_md} (변경 없음)")
+            else:
+                note_dest.write_text(new_text, encoding="utf-8")
+                changed_notes += 1
+                print(f"✓ {rel_md}")
 
             total_notes += 1
             n_imgs = len(EMBED.findall(text)) - len(missing)
             total_imgs += max(n_imgs, 0)
             all_missing += [f"{rel_md}: {x}" for x in missing]
-            print(f"✓ {rel_md}")
 
-    print(f"\n노트 {total_notes}개, 이미지 참조 {total_imgs}개 처리 완료.")
+    print(f"\n노트 {total_notes}개 중 {changed_notes}개 갱신, "
+          f"{total_notes - changed_notes}개 변경 없음. 이미지 참조 {total_imgs}개 처리 완료.")
 
     if stage and touched:
         subprocess.run(

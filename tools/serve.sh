@@ -34,6 +34,13 @@ if [ "$MODE" = "build" ]; then
   uv run mkdocs build --strict
   echo "✓ 빌드 성공. site/ 에 생성됨."
 else
+  # 같은 포트에 이미 떠 있는 서버가 있으면 내린다
+  EXISTING_PIDS=$(lsof -ti tcp:"${PORT}" 2>/dev/null || true)
+  if [ -n "$EXISTING_PIDS" ]; then
+    echo "▶ 포트 ${PORT}에서 실행 중인 기존 서버 종료 (PID: ${EXISTING_PIDS//$'\n'/, })"
+    kill $EXISTING_PIDS 2>/dev/null || true
+    sleep 1
+  fi
   echo "▶ 개발 서버 시작: http://127.0.0.1:${PORT}  (Ctrl+C로 종료)"
   uv run mkdocs serve --dev-addr "127.0.0.1:${PORT}"
 fi

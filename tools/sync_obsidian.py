@@ -77,6 +77,45 @@ def with_title(text: str, title: str) -> str:
     return f'---\ntitle: "{esc}"\n---\n\n' + text
 
 
+def demote_headings(text: str) -> str:
+    """본문에 H1이 있으면 모든 제목을 한 단계씩 내린다 (# → ##).
+
+    Material 테마는 첫 H1을 페이지 제목으로 취급해 그 하위 섹션만 목차에
+    보여주므로, H1이 여러 개인 노트는 목차에서 뒷부분이 통째로 사라진다.
+    페이지 제목은 frontmatter title이 담당하니 본문에서 H1을 없앤다.
+    코드 펜스 안과 frontmatter는 건드리지 않고, H6은 더 내리지 않는다.
+    """
+    lines = text.split("\n")
+    start = 0
+    if lines and lines[0].strip() == "---":          # frontmatter 건너뛰기
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                start = i + 1
+                break
+
+    in_fence = False
+    heading_rows: list[int] = []
+    has_h1 = False
+    for i in range(start, len(lines)):
+        stripped = lines[i].lstrip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if re.match(r"^#{1,6}\s", lines[i]):
+            heading_rows.append(i)
+            if lines[i].startswith("# "):
+                has_h1 = True
+
+    if not has_h1:
+        return text
+    for i in heading_rows:
+        if not lines[i].startswith("######"):
+            lines[i] = "#" + lines[i]
+    return "\n".join(lines)
+
+
 def convert(text: str, note_dest: Path, assets_dir: Path) -> tuple[str, list[str]]:
     """노트 본문의 임베드를 변환하고, 복사해야 할 이미지를 모은다."""
     missing: list[str] = []
@@ -136,6 +175,7 @@ def main() -> int:
 
             text = md.read_text(encoding="utf-8")
             new_text, missing = convert(text, note_dest, assets_dir)
+            new_text = demote_headings(new_text)              # H1 여러 개 → 목차 잘림 방지
             new_text = with_title(new_text, note_dest.stem)   # 파일명을 nav 제목으로
 
             # 변환 결과가 기존 파일과 동일하면 다시 쓰지 않는다(변경 없음 → 빠른 배포).

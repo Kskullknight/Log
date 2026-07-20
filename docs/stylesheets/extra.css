@@ -1,0 +1,17 @@
+/* 헤딩 크기 조정: h5/h6이 본문(1em)보다 작아지는 Material 기본값을 덮어쓴다.
+   sync_obsidian.py의 demote_headings로 원본 ####가 h5로 렌더링되므로
+   h4 > h5 > h6 ≥ 본문 순서를 유지하며 전부 본문 이상으로 키운다. */
+.md-typeset h4 {
+  font-size: 1.15em;
+}
+
+.md-typeset h5 {
+  font-size: 1.08em;
+  color: var(--md-default-fg-color);
+  text-transform: none;
+}
+
+.md-typeset h6 {
+  font-size: 1em;
+  color: var(--md-default-fg-color);
+}

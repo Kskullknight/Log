@@ -9,3 +9,6 @@ dependencies = [
     "mkdocs-callouts>=1.16.1",
     "mkdocs-material>=9.7",
 ]
+
+[tool.setuptools]
+packages = []          # 문서 저장소라 파이썬 패키지가 없음. pip install . 은 의존성 설치 용도

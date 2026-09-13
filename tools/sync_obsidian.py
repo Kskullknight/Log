@@ -30,6 +30,7 @@ ATTACH_DIRS = [VAULT / "사진"]
 # (소스 노트 폴더,  docs 안의 대상 폴더) 쌍. 항목을 추가하면 같이 동기화된다.
 SYNC = [
     (REPO / "SWE", REPO / "docs" / "SWE"),
+    (REPO / "OS", REPO / "docs" / "OS"),
 ]
 
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}

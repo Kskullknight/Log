@@ -31,6 +31,7 @@ ATTACH_DIRS = [VAULT / "사진"]
 SYNC = [
     (REPO / "SWE", REPO / "docs" / "SWE"),
     (REPO / "OS", REPO / "docs" / "OS"),
+    (REPO / "VirtualizaitonAndContainer", REPO / "docs" / "VirtualizationAndContainer"),
 ]
 
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"}

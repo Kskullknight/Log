@@ -161,12 +161,12 @@ resource "aws_ecs_task_definition" "app" {
         # (append가 아니라 교체 — 같은 환경변수 이름이 두 번 들어가면 태스크 등록이 거부된다)
         secrets = concat(
           [
-            { name = "SPRING_DATASOURCE_USERNAME", valueFrom = "${local.db_secret_arn}:${local.db_username_key}::" },
-            { name = "SPRING_DATASOURCE_PASSWORD", valueFrom = "${local.db_secret_arn}:${local.db_password_key}::" },
-            { name = "JWT_SECRET", valueFrom = "${local.app_secret_arn}:jwt_secret::" },
+            { name = "<DB 사용자명>", valueFrom = "${local.db_secret_arn}:<DB 사용자명 키>::" },
+            { name = "<DB 비밀번호>", valueFrom = "${local.db_secret_arn}:<DB 비밀번호 키>::" },
+            { name = "<토큰 서명용 비밀 키>", valueFrom = "${local.app_secret_arn}:<토큰 서명용 비밀 키>::" },
             # 시크릿에 해당 키가 없으면 태스크가 기동 실패하므로, 키 추가 후 배포할 것
-            { name = "NOTION_CLIENT_SECRET", valueFrom = "${local.app_secret_arn}:notion_client_secret::" },
-            { name = "OPENAI_API_KEY", valueFrom = "${local.app_secret_arn}:openai_api_key::" },
+            { name = "<외부 연동 서비스 클라이언트 시크릿>", valueFrom = "${local.app_secret_arn}:<외부 연동 서비스 클라이언트 시크릿>::" },
+            { name = "<외부 AI 서비스 API 키>", valueFrom = "${local.app_secret_arn}:<외부 AI 서비스 API 키>::" },
           ],
           [for k, v in var.extra_secret_keys : { name = k, valueFrom = "${local.app_secret_arn}:${v}::" }]
         )

@@ -16,8 +16,8 @@ title: "Chapter 06 - 클라우드 컨테이너 서비스"
 	- 쿠버네티스를 만든 구글이 제공
 - Cloud Run: 컨테이너 이미지를 올리면 바로 실행하는 서버리스 실행 환경
 	- 요청이 없으면 0까지 축소
-- Artifact Registry: 컨테이너 이미지와 패키지 저장소
-	- 이전의 Container Registry의 후속
+- Container Registry: 컨테이너 이미지와 패키지 저장소
+	- Artifact Registry라는 최신 버전이 나옴
 - Anthos: 온프레미스와 다른 클라우드의 클러스터까지 통합 관리
 - 독자 오케스트레이션 서비스 없이 쿠버네티스 중심으로 구성
 

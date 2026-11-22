@@ -104,6 +104,189 @@ title: "Chapter 06 - 클라우드 컨테이너 서비스"
 - 쿠버네티스 생태계(헬름, 오퍼레이터 등)의 도구를 쓸 수 없음
 - 쿠버네티스보다 세밀한 제어와 확장 기능이 적음
 
+```
+resource "aws_ecs_task_definition" "app" {
+  family                   = local.name
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  execution_role_arn       = local.task_execution_role_arn
+  task_role_arn            = local.task_role_arn
+
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture        = "X86_64"
+  }
+
+  container_definitions = jsonencode(concat(
+    [
+      {
+        name      = var.container_name
+        image     = var.container_image != "" ? var.container_image : "${aws_ecr_repository.this.repository_url}:latest"
+        essential = true
+        # SIGTERM 뒤 SIGKILL 까지(Fargate 최대 120초, 기본 30초). 블루/그린 교체 때 앱이 처리 중인 큐 메시지를 정리하고
+        # 남은 것을 가시성 0 으로 반납할 시간(app.queue.shutdown-grace 20초 + Spring 종료 단계 30초)이 30초 안에 끝나지 않아
+        # 메시지가 가시성 만료(최대 600초)까지 묶이던 문제(DEV-705). 러너 종료 예산은 이 값보다 짧아야 한다.
+        stopTimeout = 120
+
+        portMappings = [{
+          containerPort = var.app_port
+          protocol      = "tcp"
+        }]
+
+        # ECS 레벨 헬스체크: 컨테이너가 HEALTHY여야 task set이 steady state에 도달한다.
+        # 이게 없으면 healthCheckGracePeriodSeconds 유예 중 crash 직전의 태스크도
+        # "정상"으로 보여 CodeDeploy가 트래픽 전환·성공 처리해버린다 (2026-07-22 실사례).
+        # startPeriod는 앱 부팅(~40s)보다 여유 있게.
+        healthCheck = {
+          command     = ["CMD-SHELL", "curl -sf http://localhost:${var.app_port}${var.health_check_path} || exit 1"]
+          interval    = 15
+          timeout     = 5
+          retries     = 3
+          startPeriod = 60
+        }
+
+        # 앱(application.properties)이 읽는 환경변수 이름에 맞춘다:
+        # SPRING_DATASOURCE_* (Spring Boot relaxed binding)
+        environment = concat(
+          [
+            { name = "SPRING_DATASOURCE_URL", value = "jdbc:mysql://${var.db_host}:${var.db_port}/${var.db_name}" },
+            { name = "S3_BUCKET", value = aws_s3_bucket.app.bucket },
+          ],
+          [for k, v in var.extra_environment : { name = k, value = v }]
+        )
+
+        # 시크릿이 JSON이므로 키 단위로 주입. DB 자격증명 출처는 use_dedicated_db_user로 결정
+        # (append가 아니라 교체 — 같은 환경변수 이름이 두 번 들어가면 태스크 등록이 거부된다)
+        secrets = concat(
+          [
+            { name = "SPRING_DATASOURCE_USERNAME", valueFrom = "${local.db_secret_arn}:${local.db_username_key}::" },
+            { name = "SPRING_DATASOURCE_PASSWORD", valueFrom = "${local.db_secret_arn}:${local.db_password_key}::" },
+            { name = "JWT_SECRET", valueFrom = "${local.app_secret_arn}:jwt_secret::" },
+            # 시크릿에 해당 키가 없으면 태스크가 기동 실패하므로, 키 추가 후 배포할 것
+            { name = "NOTION_CLIENT_SECRET", valueFrom = "${local.app_secret_arn}:notion_client_secret::" },
+            { name = "OPENAI_API_KEY", valueFrom = "${local.app_secret_arn}:openai_api_key::" },
+          ],
+          [for k, v in var.extra_secret_keys : { name = k, valueFrom = "${local.app_secret_arn}:${v}::" }]
+        )
+
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            "awslogs-group"         = aws_cloudwatch_log_group.app.name
+            "awslogs-region"        = data.aws_region.current.region
+            "awslogs-stream-prefix" = "app"
+          }
+        }
+      }
+    ],
+    # ADOT 사이드카 — 앱의 /actuator/prometheus를 긁어 Prometheus로 remote_write.
+    # essential=false: 사이드카가 죽으면 메트릭만 끊기고 앱은 계속 서비스한다.
+    var.prometheus_remote_write_url == "" ? [] : [
+      {
+        name      = "adot-collector"
+        image     = var.adot_image
+        essential = false
+        # 하드 상한. 컬렉터가 (remote_write 목적지 유실 등으로) 버퍼를 키워도
+        # 태스크 전체가 아니라 이 컨테이너만 OOM으로 재시작되게 한다.
+        # 이게 없으면 essential=false가 무력하다 — 태스크 OOM은 앱도 같이 죽인다.
+        memory = 256
+
+        environment = [
+          {
+            name = "AOT_CONFIG_CONTENT"
+            value = templatefile("${path.module}/files/adot-config.yaml", {
+              app_port         = var.app_port
+              remote_write_url = var.prometheus_remote_write_url
+            })
+          }
+        ]
+
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            "awslogs-group"         = aws_cloudwatch_log_group.app.name
+            "awslogs-region"        = data.aws_region.current.region
+            "awslogs-stream-prefix" = "adot"
+          }
+        }
+      }
+    ]
+  ))
+}
+
+```
+
+```
+resource "aws_ecs_service" "app" {
+  name            = local.name
+  cluster         = aws_ecs_cluster.this.id
+  task_definition = aws_ecs_task_definition.app.arn
+  desired_count   = var.desired_count
+  launch_type     = "FARGATE"
+
+  deployment_controller {
+    type = "ECS"
+  }
+
+  # 네이티브 블루/그린: ECS가 green 태스크셋을 띄우고 catch-all 규칙의
+  # 가중치를 전환한다. bake 동안 blue가 살아 있어 즉시 롤백이 가능하다.
+  deployment_configuration {
+    strategy             = "BLUE_GREEN"
+    bake_time_in_minutes = var.bake_time_in_minutes
+  }
+
+  # 기동 실패(이미지 pull 실패 등) 자동 롤백. 알람 2개는 트래픽 이후
+  # 증상만 잡으므로 — 태스크가 TG에 등록조차 못 하는 실패에는 침묵한다
+  # 이게 없으면 깨진 배포가 IN_PROGRESS로 무한 재시도한다 (2026-07-28 실측).
+  # 임계치는 ECS 고정 공식(0.5×desired, 최소 3회 실패)이다.
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  # 배포 중 알람이 발화하면 자동 롤백 (5xx 급증, unhealthy hosts)
+  alarms {
+    alarm_names = var.deployment_alarm_names
+    enable      = length(var.deployment_alarm_names) > 0
+    rollback    = length(var.deployment_alarm_names) > 0
+  }
+
+  network_configuration {
+    subnets          = var.app_subnet_ids
+    security_groups  = [var.app_sg_id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = var.blue_target_group_arn
+    container_name   = var.container_name
+    container_port   = var.app_port
+
+    advanced_configuration {
+      alternate_target_group_arn = var.green_target_group_arn
+      production_listener_rule   = var.production_listener_rule_arn
+      role_arn                   = var.ecs_infrastructure_role_arn
+    }
+  }
+
+  # Spring Boot 기동 시간 동안 헬스체크 유예 (근거는 변수 설명 참고)
+  health_check_grace_period_seconds = var.health_check_grace_period_seconds
+
+  # 배포 파이프라인(GitHub Actions)이 소유하는 속성:
+  # - task_definition: 파이프라인이 새 리비전 등록 후 update-service
+  # - desired_count:   운영 중 수동/자동 스케일링 값 보존
+  # load_balancer는 일단 Terraform 관리로 되돌린다 — 네이티브 B/G가 배포마다
+  # TG 역할을 스왑하며 드리프트를 만들면 검증 배포 후 다시 ignore에 추가한다
+  # (스펙의 마이그레이션 4단계 확인 절차).
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
+  }
+}
+
+```
+
 ## 아마존 EKS
 ### 아마존 EKS란
 - AWS에서 쿠버네티스 클러스터를 손쉽게 실행할 수 있게 해주는 관리형 서비스
